@@ -1,4 +1,4 @@
-# 🛒 Shopee Health & Wellness Analytics — End-to-End AWS Serverless Data Pipeline
+# End-to-End AWS Serverless Data Pipeline
 
 An end-to-end serverless data engineering pipeline and real-time analytics dashboard built on **AWS (S3, Glue Data Catalog, Athena, Lambda)** and **Next.js**. This project ingests, transforms, and analyzes **2,622 Shopee Health & Wellness products across 30 categories** to uncover market pricing trends and category distributions.
 
