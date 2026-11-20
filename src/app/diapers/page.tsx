@@ -88,7 +88,7 @@ interface DiapersPayload {
 
 const LAMBDA_URL =
   process.env.NEXT_PUBLIC_LAMBDA_FUNCTION_URL ||
-  "YOUR_LAMBDA_FUNCTION_URL_HERE";
+  "https://uuepwfu7zmgoeueuywkop4ehgq0gkhsw.lambda-url.ap-southeast-2.on.aws/ ";
 
 export default function DiapersAnalyticsPage() {
   const [data, setData] = useState<DiapersPayload | null>(null);
