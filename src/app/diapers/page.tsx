@@ -13,82 +13,103 @@ import {
 } from "recharts";
 
 interface DiapersKpis {
-  total_skus: number;
-  unique_shops: number;
-  unique_brands: number;
-  total_recent_sold: number;
-  total_history_sold: number;
-  mall_skus: number;
-  nonmall_skus: number;
-  mall_history_sold: number;
-  nonmall_history_sold: number;
-  avg_price: number;
-  avg_discount: number;
-  avg_rating: number;
+  total_skus?: number;
+  unique_shops?: number;
+  unique_brands?: number;
+  total_recent_sold?: number;
+  total_history_sold?: number;
+  mall_skus?: number;
+  nonmall_skus?: number;
+  mall_history_sold?: number;
+  nonmall_history_sold?: number;
+  avg_price?: number;
+  avg_discount?: number;
+  avg_rating?: number;
 }
 
 interface PriceTierRow {
   price_tier: string;
-  sku_count: number;
-  recent_sold: number;
-  history_sold: number;
-  avg_price: number;
-  avg_discount: number;
+  sku_count?: number;
+  recent_sold?: number;
+  history_sold?: number;
+  avg_price?: number;
+  avg_discount?: number;
 }
 
 interface MallRow {
   channel: string;
-  is_mall: boolean;
-  sku_count: number;
-  shop_count: number;
-  avg_price: number;
-  median_price: number;
-  avg_discount: number;
-  recent_sold: number;
-  history_sold: number;
-  avg_rating: number;
+  is_mall?: boolean;
+  sku_count?: number;
+  shop_count?: number;
+  avg_price?: number;
+  median_price?: number;
+  avg_discount?: number;
+  recent_sold?: number;
+  history_sold?: number;
+  avg_rating?: number;
 }
 
 interface BrandRow {
   brand_en: string;
-  sku_count: number;
-  mall_skus: number;
-  nonmall_skus: number;
-  recent_sold: number;
-  history_sold: number;
-  avg_price: number;
-  avg_discount: number;
-  avg_rating: number;
+  sku_count?: number;
+  mall_skus?: number;
+  nonmall_skus?: number;
+  recent_sold?: number;
+  history_sold?: number;
+  avg_price?: number;
+  avg_discount?: number;
+  avg_rating?: number;
 }
 
 interface DiaperItem {
-  itemId: string;
-  name: string;
-  brand_en: string;
-  shop_name: string;
-  is_mall: boolean;
-  price_tier: string;
-  price: number;
-  price_before_discount: number;
-  discountPercent: number;
-  sold: number;
-  historySold: number;
-  rating: number;
-  url: string;
+  itemId: string | number;
+  name?: string;
+  brand_en?: string;
+  shop_name?: string;
+  is_mall?: boolean;
+  price_tier?: string;
+  price?: number;
+  price_before_discount?: number;
+  discountPercent?: number;
+  sold?: number;
+  historySold?: number;
+  rating?: number;
+  url?: string;
 }
 
 interface DiapersPayload {
-  dataset: string;
-  kpis: DiapersKpis;
-  price_tiers: PriceTierRow[];
-  mall_comparison: MallRow[];
-  top_brands: BrandRow[];
-  items: DiaperItem[];
+  dataset?: string;
+  kpis?: DiapersKpis;
+  price_tiers?: PriceTierRow[];
+  mall_comparison?: MallRow[];
+  top_brands?: BrandRow[];
+  items?: DiaperItem[];
 }
 
-const LAMBDA_URL =
+const RAW_LAMBDA_URL =
   process.env.NEXT_PUBLIC_LAMBDA_FUNCTION_URL ||
-  "https://uuepwfu7zmgoeueuywkop4ehgq0gkhsw.lambda-url.ap-southeast-2.on.aws/ ";
+  "https://uuepwfu7zmgoeueuywkop4ehgq0gkhsw.lambda-url.ap-southeast-2.on.aws";
+
+const LAMBDA_URL = RAW_LAMBDA_URL.trim().replace(/\/+$/, "");
+
+function normalizePayload(raw: unknown): DiapersPayload | null {
+  if (!raw || typeof raw !== "object") return null;
+  const obj = raw as Record<string, unknown>;
+  if (obj.data && typeof obj.data === "object") {
+    return obj.data as DiapersPayload;
+  }
+  if (typeof obj.body === "string") {
+    try {
+      const parsed = JSON.parse(obj.body) as Record<string, unknown>;
+      return (parsed.data && typeof parsed.data === "object"
+        ? parsed.data
+        : parsed) as DiapersPayload;
+    } catch {
+      return null;
+    }
+  }
+  return obj as DiapersPayload;
+}
 
 export default function DiapersAnalyticsPage() {
   const [data, setData] = useState<DiapersPayload | null>(null);
@@ -112,9 +133,13 @@ export default function DiapersAnalyticsPage() {
         if (!res.ok) {
           throw new Error(`API error: ${res.status}`);
         }
-        const json: DiapersPayload = await res.json();
+        const rawJson: unknown = await res.json();
+        const normalized = normalizePayload(rawJson);
+        if (!normalized) {
+          throw new Error("Invalid response format from Lambda");
+        }
         if (active) {
-          setData(json);
+          setData(normalized);
         }
       } catch (err: unknown) {
         if (active) {
@@ -132,22 +157,23 @@ export default function DiapersAnalyticsPage() {
     };
   }, []);
 
+  const itemsList = useMemo(() => data?.items ?? [], [data?.items]);
+
   const filteredItems = useMemo(() => {
-    if (!data?.items) return [];
-    return data.items.filter((item) => {
+    return itemsList.filter((item) => {
       if (channelFilter === "MALL" && !item.is_mall) return false;
       if (channelFilter === "NON_MALL" && item.is_mall) return false;
-      if (tierFilter !== "ALL" && item.price_tier !== tierFilter) return false;
+      if (tierFilter !== "ALL" && (item.price_tier ?? "") !== tierFilter) return false;
       if (searchTerm.trim() !== "") {
         const q = searchTerm.toLowerCase();
-        const matchName = item.name.toLowerCase().includes(q);
-        const matchBrand = item.brand_en.toLowerCase().includes(q);
-        const matchShop = item.shop_name.toLowerCase().includes(q);
+        const matchName = (item.name ?? "").toLowerCase().includes(q);
+        const matchBrand = (item.brand_en ?? "").toLowerCase().includes(q);
+        const matchShop = (item.shop_name ?? "").toLowerCase().includes(q);
         if (!matchName && !matchBrand && !matchShop) return false;
       }
       return true;
     });
-  }, [data, channelFilter, tierFilter, searchTerm]);
+  }, [itemsList, channelFilter, tierFilter, searchTerm]);
 
   if (loading) {
     return (
@@ -172,10 +198,25 @@ export default function DiapersAnalyticsPage() {
     );
   }
 
-  const { kpis, price_tiers, mall_comparison, top_brands } = data;
+  const totalSkus = Number(data.kpis?.total_skus ?? 0);
+  const uniqueShops = Number(data.kpis?.unique_shops ?? 0);
+  const uniqueBrands = Number(data.kpis?.unique_brands ?? 0);
+  const totalRecentSold = Number(data.kpis?.total_recent_sold ?? 0);
+  const totalHistorySold = Number(data.kpis?.total_history_sold ?? 0);
+  const mallSkus = Number(data.kpis?.mall_skus ?? 0);
+  const nonmallSkus = Number(data.kpis?.nonmall_skus ?? 0);
+  const mallHistorySold = Number(data.kpis?.mall_history_sold ?? 0);
+  const avgPrice = Number(data.kpis?.avg_price ?? 0);
+  const avgDiscount = Number(data.kpis?.avg_discount ?? 0);
+  const avgRating = Number(data.kpis?.avg_rating ?? 0);
+
+  const priceTiers = data.price_tiers ?? [];
+  const mallComparison = data.mall_comparison ?? [];
+  const topBrands = data.top_brands ?? [];
+
   const mallSharePct =
-    kpis.total_history_sold > 0
-      ? ((kpis.mall_history_sold / kpis.total_history_sold) * 100).toFixed(1)
+    totalHistorySold > 0
+      ? ((mallHistorySold / totalHistorySold) * 100).toFixed(1)
       : "0.0";
 
   return (
@@ -201,20 +242,20 @@ export default function DiapersAnalyticsPage() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
             <p className="text-xs text-slate-400 uppercase">Total Diaper SKUs</p>
             <p className="text-3xl font-bold text-white mt-1">
-              {kpis.total_skus.toLocaleString()}
+              {totalSkus.toLocaleString()}
             </p>
             <p className="text-xs text-slate-400 mt-2">
-              {kpis.unique_shops} Shops • {kpis.unique_brands} Brands
+              {uniqueShops.toLocaleString()} Shops • {uniqueBrands.toLocaleString()} Brands
             </p>
           </div>
 
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
             <p className="text-xs text-slate-400 uppercase">Historical Sold (Units)</p>
             <p className="text-3xl font-bold text-orange-400 mt-1">
-              {kpis.total_history_sold.toLocaleString()}
+              {totalHistorySold.toLocaleString()}
             </p>
             <p className="text-xs text-slate-400 mt-2">
-              Recent Sold: {kpis.total_recent_sold.toLocaleString()} units
+              Recent Sold: {totalRecentSold.toLocaleString()} units
             </p>
           </div>
 
@@ -222,17 +263,17 @@ export default function DiapersAnalyticsPage() {
             <p className="text-xs text-slate-400 uppercase">Mall Share (History Sold)</p>
             <p className="text-3xl font-bold text-emerald-400 mt-1">{mallSharePct}%</p>
             <p className="text-xs text-slate-400 mt-2">
-              Mall: {kpis.mall_skus} SKUs vs Non-Mall: {kpis.nonmall_skus} SKUs
+              Mall: {mallSkus.toLocaleString()} SKUs vs Non-Mall: {nonmallSkus.toLocaleString()} SKUs
             </p>
           </div>
 
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
             <p className="text-xs text-slate-400 uppercase">Avg Price &amp; Discount</p>
             <p className="text-3xl font-bold text-sky-400 mt-1">
-              ฿{kpis.avg_price.toLocaleString()}
+              ฿{avgPrice.toLocaleString()}
             </p>
             <p className="text-xs text-slate-400 mt-2">
-              Avg Discount: {kpis.avg_discount}% • Avg Rating: {kpis.avg_rating}★
+              Avg Discount: {avgDiscount}% • Avg Rating: {avgRating}★
             </p>
           </div>
         </section>
@@ -249,7 +290,7 @@ export default function DiapersAnalyticsPage() {
             </p>
             <div className="h-72 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={price_tiers}>
+                <BarChart data={priceTiers}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                   <XAxis dataKey="price_tier" stroke="#94a3b8" fontSize={12} />
                   <YAxis stroke="#94a3b8" fontSize={12} />
@@ -278,7 +319,7 @@ export default function DiapersAnalyticsPage() {
             </p>
             <div className="h-72 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={mall_comparison}>
+                <BarChart data={mallComparison}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                   <XAxis dataKey="channel" stroke="#94a3b8" fontSize={12} />
                   <YAxis stroke="#94a3b8" fontSize={12} />
@@ -317,21 +358,26 @@ export default function DiapersAnalyticsPage() {
                 </tr>
               </thead>
               <tbody>
-                {top_brands.map((b) => (
+                {topBrands.map((b) => (
                   <tr key={b.brand_en} className="border-b border-slate-800/60 hover:bg-slate-800/40">
                     <td className="py-3 px-3 font-medium text-white">{b.brand_en}</td>
                     <td className="py-3 px-3 text-right text-slate-300">
-                      {b.sku_count} ({b.mall_skus}/{b.nonmall_skus})
+                      {Number(b.sku_count ?? 0).toLocaleString()} ({Number(b.mall_skus ?? 0)}/
+                      {Number(b.nonmall_skus ?? 0)})
                     </td>
                     <td className="py-3 px-3 text-right text-orange-400 font-semibold">
-                      {b.history_sold.toLocaleString()}
+                      {Number(b.history_sold ?? 0).toLocaleString()}
                     </td>
                     <td className="py-3 px-3 text-right text-sky-300">
-                      {b.recent_sold.toLocaleString()}
+                      {Number(b.recent_sold ?? 0).toLocaleString()}
                     </td>
-                    <td className="py-3 px-3 text-right">฿{b.avg_price.toLocaleString()}</td>
-                    <td className="py-3 px-3 text-right text-amber-300">{b.avg_discount}%</td>
-                    <td className="py-3 px-3 text-right">{b.avg_rating}★</td>
+                    <td className="py-3 px-3 text-right">
+                      ฿{Number(b.avg_price ?? 0).toLocaleString()}
+                    </td>
+                    <td className="py-3 px-3 text-right text-amber-300">
+                      {Number(b.avg_discount ?? 0)}%
+                    </td>
+                    <td className="py-3 px-3 text-right">{Number(b.avg_rating ?? 0)}★</td>
                   </tr>
                 ))}
               </tbody>
@@ -343,7 +389,7 @@ export default function DiapersAnalyticsPage() {
         <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
             <h2 className="text-lg font-semibold text-white">
-              Diaper Product Listings ({filteredItems.length} shown)
+              Diaper Product Listings ({filteredItems.length.toLocaleString()} shown)
             </h2>
             <div className="flex flex-wrap gap-2">
               <select
@@ -394,17 +440,21 @@ export default function DiapersAnalyticsPage() {
                 {filteredItems.map((item) => (
                   <tr key={item.itemId} className="border-b border-slate-800/60 hover:bg-slate-800/40">
                     <td className="py-3 px-3 max-w-md">
-                      <a
-                        href={item.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-white hover:text-orange-400 line-clamp-2"
-                      >
-                        {item.name}
-                      </a>
-                      <span className="text-xs text-slate-400">{item.shop_name}</span>
+                      {item.url ? (
+                        <a
+                          href={item.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-white hover:text-orange-400 line-clamp-2"
+                        >
+                          {item.name ?? "-"}
+                        </a>
+                      ) : (
+                        <span className="text-white line-clamp-2">{item.name ?? "-"}</span>
+                      )}
+                      <span className="block text-xs text-slate-400">{item.shop_name ?? "-"}</span>
                     </td>
-                    <td className="py-3 px-3 text-slate-200">{item.brand_en}</td>
+                    <td className="py-3 px-3 text-slate-200">{item.brand_en ?? "-"}</td>
                     <td className="py-3 px-3">
                       <span
                         className={`text-xs px-2 py-0.5 rounded-full ${
@@ -416,11 +466,15 @@ export default function DiapersAnalyticsPage() {
                         {item.is_mall ? "Mall" : "Non-Mall"}
                       </span>
                     </td>
-                    <td className="py-3 px-3 text-xs text-slate-300">{item.price_tier}</td>
-                    <td className="py-3 px-3 text-right font-medium">฿{item.price.toLocaleString()}</td>
-                    <td className="py-3 px-3 text-right text-amber-300">{item.discountPercent}%</td>
+                    <td className="py-3 px-3 text-xs text-slate-300">{item.price_tier ?? "-"}</td>
+                    <td className="py-3 px-3 text-right font-medium">
+                      ฿{Number(item.price ?? 0).toLocaleString()}
+                    </td>
+                    <td className="py-3 px-3 text-right text-amber-300">
+                      {Number(item.discountPercent ?? 0)}%
+                    </td>
                     <td className="py-3 px-3 text-right text-orange-400 font-semibold">
-                      {item.historySold.toLocaleString()}
+                      {Number(item.historySold ?? 0).toLocaleString()}
                     </td>
                   </tr>
                 ))}
